@@ -1,8 +1,8 @@
 // inbox.jsx — notifications inbox with replies / mentions / messages tabs
 
-function InboxScreen({ theme, onOpenPost }) {
+function InboxScreen({ theme, notifications, onNotificationsChange, onOpenPost }) {
   const [tab, setTab] = React.useState('replies');
-  const [items, setItems] = React.useState(NOTIFICATIONS);
+  const [items, setItems] = React.useState(notifications || NOTIFICATIONS);
 
   const tabs = [
     { id: 'replies',  l: 'Replies',  icon: Icon.reply },
@@ -70,7 +70,9 @@ function InboxScreen({ theme, onOpenPost }) {
 
       <div>
         {list.map(n => {
-          const userRef = USERS.find(u => u.id === n.from);
+          const userRef = n.fromRef
+            ? { ...n.fromRef, avatar: n.fromRef.avatar || avatar(n.fromRef.name || n.from || 'u') }
+            : (USERS.find(u => u.id === n.from) || { name: n.from, avatar: avatar(n.from || 'u') });
           return (
             <button key={n.id} onClick={() => markRead(n.id)} style={btnReset({
               width: '100%', padding: '14px 16px',

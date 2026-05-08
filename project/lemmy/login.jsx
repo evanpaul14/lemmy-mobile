@@ -8,6 +8,7 @@ function LoginScreen({ theme, onComplete }) {
   const [user, setUser] = React.useState('');
   const [pass, setPass] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
 
   const instances = [
     { id: 'lemmy.world',  users: '142k', desc: 'Largest general-purpose instance', flag: '🌐' },
@@ -17,9 +18,27 @@ function LoginScreen({ theme, onComplete }) {
     { id: 'fed.fyi',      users: '4.2k', desc: 'Indie web & federation',     flag: '🛰️' },
   ];
 
-  function submit() {
+  async function submit() {
+    setError('');
     setLoading(true);
-    setTimeout(() => { setLoading(false); onComplete(); }, 1100);
+    try {
+      const data = await API.login(instance, user, pass);
+      onComplete(data.user);
+    } catch (err) {
+      setError(err.message || 'Login failed');
+      setLoading(false);
+    }
+  }
+
+  async function browseAnon() {
+    setLoading(true);
+    try {
+      await API.loginAnonymous(instance);
+      onComplete(null);
+    } catch (err) {
+      setError(err.message || 'Failed to connect');
+      setLoading(false);
+    }
   }
 
   return (
@@ -204,7 +223,10 @@ function LoginScreen({ theme, onComplete }) {
           })}>
             {loading ? 'Connecting…' : (mode === 'signin' ? 'Sign in' : 'Create account')}
           </button>
-          <button onClick={onComplete} style={btnReset({
+          {error && (
+            <div style={{ color: '#ff5d6c', fontSize: 12.5, textAlign: 'center', marginTop: 4 }}>{error}</div>
+          )}
+          <button onClick={browseAnon} style={btnReset({
             width: '100%', padding: '12px 16px', marginTop: 6,
             color: theme.textDim, fontSize: 13, fontWeight: 600,
           })}>Browse without an account</button>

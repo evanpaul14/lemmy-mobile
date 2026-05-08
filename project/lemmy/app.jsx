@@ -76,28 +76,134 @@ function StatusBar({ dark = true }) {
   );
 }
 
+function LoadingScreen({ theme }) {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', background: theme.bg, gap: 16,
+    }}>
+      <div style={{
+        width: 52, height: 52, borderRadius: 16,
+        background: `linear-gradient(135deg, ${theme.accent.hex}, ${theme.accent.hex}80)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: `0 8px 28px ${theme.accent.hex}44`,
+      }}>
+        <Icon.flame size={28} color={theme.amoled ? '#000' : '#0a0a0c'} stroke={2.2} />
+      </div>
+      <div style={{
+        width: 32, height: 32, borderRadius: 999,
+        border: `2.5px solid ${theme.surface2}`,
+        borderTopColor: theme.accent.hex,
+        animation: 'spin 0.8s linear infinite',
+      }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const theme = buildTheme(t);
 
+  const [loading, setLoading] = React.useState(true);
   const [authed, setAuthed] = React.useState(false);
   const [tab, setTab] = React.useState('home');
-  const [stack, setStack] = React.useState([]);  // [{ kind, payload }]
-  const [overlay, setOverlay] = React.useState(null); // 'compose' | 'settings' | 'search' | null
-  const [posts, setPosts] = React.useState(POSTS);
+  const [stack, setStack] = React.useState([]);
+  const [overlay, setOverlay] = React.useState(null);
+  const [posts, setPosts] = React.useState([]);
+  const [notifications, setNotifications] = React.useState({ replies: [], mentions: [], messages: [] });
 
-  // mutate state
-  const onVote = (id, v) => setPosts(prev => prev.map(p => p.id === id ? { ...p, votes: v } : p));
-  const onSave = (id) => setPosts(prev => prev.map(p => p.id === id ? { ...p, saved: !p.saved } : p));
+  // ── Initial auth check ──────────────────────────────────────────────────
+  React.useEffect(() => {
+    API.me()
+      .then(data => {
+        if (data.authenticated) {
+          if (data.user) {
+            window.ME = {
+              id: 'me',
+              name: data.user.name,
+              instance: data.user.instance,
+              avatar: avatar('me_' + data.user.name, { letter: (data.user.name || 'Y')[0].toUpperCase() }),
+            };
+          }
+          return loadInitialData();
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
+  async function loadInitialData() {
+    try {
+      const [postsData, communitiesData] = await Promise.all([
+        API.getPosts('All', 'Hot', 1),
+        API.getCommunities('All'),
+      ]);
+
+      const enrichedPosts = enrichPosts(postsData.posts || []);
+      window.COMMUNITIES = enrichCommunities(communitiesData.communities || []);
+      setPosts(enrichedPosts);
+
+      // Fetch inbox counts (non-blocking — don't delay app render)
+      Promise.all([API.getReplies(), API.getMentions(), API.getMessages()])
+        .then(([r, m, msg]) => {
+          const notifs = {
+            replies: r.replies || [],
+            mentions: m.mentions || [],
+            messages: msg.messages || [],
+          };
+          window.NOTIFICATIONS = notifs;
+          setNotifications(notifs);
+        })
+        .catch(() => {});
+
+      setAuthed(true);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load initial data:', err);
+      setLoading(false);
+    }
+  }
+
+  // ── Post mutations ──────────────────────────────────────────────────────
+  const onVote = (id, v) => {
+    const score = v === 'up' ? 1 : v === 'down' ? -1 : 0;
+    setPosts(prev => prev.map(p => p.id === id ? { ...p, votes: v } : p));
+    if (authed) API.votePost(id, score).catch(console.error);
+  };
+
+  const onSave = (id) => {
+    setPosts(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const newSaved = !p.saved;
+      if (authed) API.savePost(id, newSaved).catch(console.error);
+      return { ...p, saved: newSaved };
+    }));
+  };
+
+  // ── Navigation ──────────────────────────────────────────────────────────
   const top = stack[stack.length - 1];
   const push = (item) => setStack(prev => [...prev, item]);
   const pop = () => setStack(prev => prev.slice(0, -1));
 
-  function openPost(post) { push({ kind: 'post', payload: post }); }
+  function openPost(post) {
+    const item = { kind: 'post', payload: post, comments: [] };
+    push(item);
+    // Fetch comments in the background
+    API.getComments(post.id)
+      .then(data => {
+        setStack(prev => prev.map(s =>
+          s.kind === 'post' && s.payload.id === post.id
+            ? { ...s, comments: enrichComments(data.comments || []) }
+            : s
+        ));
+      })
+      .catch(console.error);
+  }
+
   function openCommunity(c) { push({ kind: 'community', payload: c }); }
 
-  // when user changes tabs, reset stack
   function selectTab(id) {
     setStack([]);
     setOverlay(null);
@@ -105,17 +211,17 @@ function App() {
   }
 
   const unread =
-    NOTIFICATIONS.replies.filter(n => n.unread).length +
-    NOTIFICATIONS.mentions.filter(n => n.unread).length +
-    NOTIFICATIONS.messages.filter(n => n.unread).length;
+    (notifications.replies || []).filter(n => n.unread).length +
+    (notifications.mentions || []).filter(n => n.unread).length +
+    (notifications.messages || []).filter(n => n.unread).length;
 
-  // current screen content (without tab bar / overlays)
+  // ── Screens ─────────────────────────────────────────────────────────────
   let screen;
   if (top) {
     if (top.kind === 'post') {
       const fresh = posts.find(p => p.id === top.payload.id) || top.payload;
-      screen = <PostDetailScreen theme={theme} post={fresh} onBack={pop}
-        onVote={onVote} onSave={onSave} onOpenCommunity={openCommunity} />;
+      screen = <PostDetailScreen theme={theme} post={fresh} comments={top.comments || []}
+        onBack={pop} onVote={onVote} onSave={onSave} onOpenCommunity={openCommunity} />;
     } else if (top.kind === 'community') {
       screen = <CommunityScreen theme={theme} community={top.payload} posts={posts}
         onBack={pop} onOpenPost={openPost} onVote={onVote} onSave={onSave} />;
@@ -131,7 +237,8 @@ function App() {
       onOpenPost={openPost} onOpenCommunity={openCommunity}
       onBack={() => selectTab('home')} />;
   } else if (tab === 'inbox') {
-    screen = <InboxScreen theme={theme} onOpenPost={openPost} />;
+    screen = <InboxScreen theme={theme} notifications={notifications}
+      onNotificationsChange={setNotifications} onOpenPost={openPost} />;
   } else if (tab === 'profile') {
     screen = <ProfileScreen theme={theme} posts={posts}
       onOpenPost={openPost}
@@ -139,13 +246,33 @@ function App() {
       onVote={onVote} onSave={onSave} />;
   }
 
-  // Hide tab bar when on a stacked detail screen (more app-like)
   const showTabBar = !top && overlay !== 'compose' && overlay !== 'settings' && overlay !== 'search';
+
+  // ── Auth gate ────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <Frame theme={theme}>
+        <LoadingScreen theme={theme} />
+        <Tweaks theme={theme} t={t} setTweak={setTweak} />
+      </Frame>
+    );
+  }
 
   if (!authed) {
     return (
       <Frame theme={theme}>
-        <LoginScreen theme={theme} onComplete={() => setAuthed(true)} />
+        <LoginScreen theme={theme} onComplete={(userData) => {
+          if (userData) {
+            window.ME = {
+              id: 'me',
+              name: userData.name,
+              instance: userData.instance,
+              avatar: avatar('me_' + userData.name, { letter: (userData.name || 'Y')[0].toUpperCase() }),
+            };
+          }
+          setLoading(true);
+          loadInitialData().then(() => setAuthed(true));
+        }} />
         <Tweaks theme={theme} t={t} setTweak={setTweak} />
       </Frame>
     );
@@ -157,26 +284,27 @@ function App() {
         <StatusBar />
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           {screen}
-          {/* Detail screen overlays slide on top */}
         </div>
       </div>
 
       {showTabBar && <TabBar theme={theme} current={tab} onTab={selectTab} unread={unread} />}
 
-      {/* overlay screens (modal sheets) */}
       {overlay === 'compose' && (
         <Sheet theme={theme}>
           <ComposeScreen theme={theme}
             onClose={() => setOverlay(null)}
-            onSubmit={(data) => {
+            onSubmit={async (data) => {
               const newPost = {
                 id: Date.now(), community: data.community.id, author: 'me', age: 'now',
                 title: data.title, body: data.body, kind: data.kind, url: data.url,
                 thumb: data.kind === 'image' ? thumb('photo') : data.kind === 'link' ? thumb('news') : null,
                 score: 1, votes: 'up', comments: 0, saved: false, tag: data.tag || null,
               };
-              newPost.communityRef = data.community;
-              newPost.authorRef = ME;
+              newPost.communityRef = {
+                ...data.community,
+                avatar: data.community.avatar || avatar(data.community.name || 'c', { letter: (data.community.name || 'c')[0] }),
+              };
+              newPost.authorRef = window.ME || { id: 'me', name: 'you', instance: 'lemmy.world', avatar: avatar('me') };
               setPosts(prev => [newPost, ...prev]);
               setOverlay(null);
             }} />
@@ -201,7 +329,6 @@ function App() {
   );
 }
 
-// Scaling phone frame: the iOS frame is 402×874. Scale to fit viewport.
 function Frame({ theme, children }) {
   const W = 402, H = 874;
   const [scale, setScale] = React.useState(1);
@@ -230,13 +357,11 @@ function Frame({ theme, children }) {
           background: theme.bg,
           boxShadow: '0 40px 120px rgba(0,0,0,0.6), 0 0 0 8px #1a1a1d, 0 0 0 9px #2a2a2e',
         }}>
-          {/* dynamic island */}
           <div style={{
             position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)',
             width: 122, height: 34, borderRadius: 22, background: '#000', zIndex: 100,
           }} />
           {children}
-          {/* home indicator */}
           <div style={{
             position: 'absolute', left: 0, right: 0, bottom: 0, height: 24,
             display: 'flex', justifyContent: 'center', alignItems: 'flex-end',

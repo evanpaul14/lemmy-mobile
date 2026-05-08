@@ -2,10 +2,11 @@
 
 function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, onSave }) {
   const [tab, setTab] = React.useState('posts');
-  const [joined, setJoined] = React.useState(true);
+  const [joined, setJoined] = React.useState(community.subscribed !== false);
 
   const banner = community.cover || 'abstract';
   const bannerSrc = thumb(banner);
+  const communityAvatar = community.avatar || avatar(community.name || community.id || 'c', { letter: (community.name || 'c')[0] });
 
   const cPosts = posts.filter(p => p.community === community.id);
 
@@ -49,11 +50,11 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
       <div style={{ padding: '0 16px 12px', marginTop: -28, position: 'relative' }}>
         <div style={{
           width: 64, height: 64, borderRadius: 18,
-          background: community.avatar.bg,
-          color: community.avatar.fg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: communityAvatar.bg,
+          color: communityAvatar.fg, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 30, fontWeight: 800,
           border: `3px solid ${theme.bg}`,
-        }}>{community.avatar.letter}</div>
+        }}>{communityAvatar.letter}</div>
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -166,12 +167,15 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
 
       {tab === 'modlog' && (
         <div style={{ padding: 16 }}>
-          {USERS.slice(0, 4).map(u => (
+          {(USERS.length === 0
+            ? [{ id: community.name, name: community.name, instance: community.instance, avatar: communityAvatar }]
+            : USERS.slice(0, 4)
+          ).map(u => (
             <div key={u.id} style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '12px 0', borderBottom: `0.5px solid ${theme.divider}`,
             }}>
-              <Avatar a={u.avatar} size={40} />
+              <Avatar a={u.avatar || avatar(u.name || u.id || 'u')} size={40} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{u.name}</div>
                 <div style={{ fontSize: 11.5, color: theme.textDim }}>@{u.instance} · moderator</div>

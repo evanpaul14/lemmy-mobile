@@ -2,7 +2,7 @@
 
 function ProfileScreen({ theme, posts, onOpenPost, onOpenSettings, onVote, onSave }) {
   const [tab, setTab] = React.useState('posts');
-  const me = ME;
+  const me = ME || { id: 'me', name: 'you', instance: 'lemmy.world', avatar: avatar('me_user', { letter: 'Y' }) };
 
   const myPosts = posts.filter(p => p.author === 'me' || p.id === 3); // demo: post #3 is "mine"
   const savedPosts = posts.filter(p => p.saved);

@@ -1,20 +1,45 @@
-// search.jsx — search with live filtering across communities, posts, users
+// search.jsx — search backed by the real Lemmy API
 
 function SearchScreen({ theme, posts, onOpenPost, onOpenCommunity, onBack }) {
   const [q, setQ] = React.useState('');
   const [tab, setTab] = React.useState('all');
+  const [apiResults, setApiResults] = React.useState(null);
+  const [searching, setSearching] = React.useState(false);
   const inputRef = React.useRef(null);
+  const debounceRef = React.useRef(null);
 
   React.useEffect(() => {
     inputRef.current && inputRef.current.focus();
   }, []);
 
+  React.useEffect(() => {
+    const ql = q.trim();
+    if (!ql) { setApiResults(null); return; }
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearching(true);
+      API.search(ql)
+        .then(data => {
+          setApiResults({
+            communities: enrichCommunities(data.communities || []),
+            posts: enrichPosts(data.posts || []),
+            users: data.users || [],
+          });
+        })
+        .catch(() => setApiResults(null))
+        .finally(() => setSearching(false));
+    }, 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [q]);
+
   const ql = q.trim().toLowerCase();
-  const fc = ql ? COMMUNITIES.filter(c =>
-    c.name.toLowerCase().includes(ql) || c.desc.toLowerCase().includes(ql)) : [];
-  const fp = ql ? posts.filter(p =>
-    p.title.toLowerCase().includes(ql) || (p.body || '').toLowerCase().includes(ql)) : [];
-  const fu = ql ? USERS.filter(u => u.name.toLowerCase().includes(ql)) : [];
+  // Use API results when available, fall back to local filter for instant feel
+  const fc = apiResults ? apiResults.communities
+    : ql ? COMMUNITIES.filter(c => c.name.toLowerCase().includes(ql) || (c.desc || '').toLowerCase().includes(ql)) : [];
+  const fp = apiResults ? apiResults.posts
+    : ql ? posts.filter(p => p.title.toLowerCase().includes(ql) || (p.body || '').toLowerCase().includes(ql)) : [];
+  const fu = apiResults ? apiResults.users
+    : ql ? USERS.filter(u => u.name.toLowerCase().includes(ql)) : [];
 
   const recent = ['rust', 'mech keyboards', 'cozy games', 'self-host backup'];
 
@@ -38,7 +63,10 @@ function SearchScreen({ theme, posts, onOpenPost, onOpenCommunity, onBack }) {
                 color: theme.text, fontSize: 15, fontFamily: 'inherit',
                 letterSpacing: -0.1,
               }} />
-            {q && (
+            {searching && (
+              <div style={{ width: 16, height: 16, borderRadius: 999, border: `2px solid ${theme.surface2}`, borderTopColor: theme.accent.hex, animation: 'spin 0.7s linear infinite' }} />
+            )}
+            {q && !searching && (
               <button onClick={() => setQ('')} style={btnReset({ color: theme.textDim, padding: 2 })}>
                 <Icon.close size={16} />
               </button>

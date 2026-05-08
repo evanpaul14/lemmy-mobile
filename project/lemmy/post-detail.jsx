@@ -14,7 +14,9 @@ function CommentNode({ c, theme, depth = 0 }) {
   ];
   const stripeColor = stripeColors[depth % stripeColors.length];
 
-  const userRef = USERS.find(u => u.id === c.author);
+  const userRef = c.authorRef
+    ? { ...c.authorRef, avatar: c.authorRef.avatar || avatar(c.authorRef.name || c.author || 'u') }
+    : (USERS.find(u => u.id === c.author) || { name: c.author, avatar: avatar(c.author || 'u') });
 
   const adj = vote === 'up' ? 1 : vote === 'down' ? -1 : 0;
 
@@ -85,7 +87,7 @@ function countReplies(c) {
   return c.replies.length + c.replies.reduce((acc, r) => acc + countReplies(r), 0);
 }
 
-function PostDetailScreen({ theme, post, onBack, onVote, onSave, onOpenCommunity }) {
+function PostDetailScreen({ theme, post, comments, onBack, onVote, onSave, onOpenCommunity }) {
   const [sort, setSort] = React.useState('top');
 
   return (
@@ -219,7 +221,12 @@ function PostDetailScreen({ theme, post, onBack, onVote, onSave, onOpenCommunity
       </div>
 
       <div style={{ padding: '0 16px' }}>
-        {COMMENTS.map(c => <CommentNode key={c.id} c={c} theme={theme} />)}
+        {(comments || []).length === 0 && (
+          <div style={{ padding: '20px 0', textAlign: 'center', color: theme.textDim, fontSize: 13 }}>
+            Loading comments…
+          </div>
+        )}
+        {(comments || []).map(c => <CommentNode key={c.id} c={c} theme={theme} />)}
       </div>
 
       <div style={{ height: 80 }} />

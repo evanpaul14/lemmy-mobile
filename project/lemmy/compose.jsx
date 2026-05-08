@@ -2,7 +2,8 @@
 
 function ComposeScreen({ theme, onClose, onSubmit }) {
   const [kind, setKind] = React.useState('text'); // text / link / image
-  const [community, setCommunity] = React.useState(COMMUNITIES[0]);
+  const defaultCommunity = COMMUNITIES[0] || { id: 'general', name: 'general', instance: 'lemmy.world', members: '0', avatar: avatar('general', { letter: 'g' }) };
+  const [community, setCommunity] = React.useState(defaultCommunity);
   const [title, setTitle] = React.useState('');
   const [body, setBody] = React.useState('');
   const [url, setUrl] = React.useState('');
@@ -42,7 +43,7 @@ function ComposeScreen({ theme, onClose, onSubmit }) {
         padding: '12px 16px', gap: 10, justifyContent: 'flex-start',
         borderBottom: `0.5px solid ${theme.divider}`,
       })}>
-        <Avatar a={community.avatar} size={32} />
+        <Avatar a={community.avatar || avatar(community.name || community.id || 'c', { letter: (community.name || 'c')[0] })} size={32} />
         <div style={{ textAlign: 'left', flex: 1 }}>
           <div style={{ fontSize: 11, color: theme.textDim, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase' }}>
             Posting to
@@ -65,7 +66,7 @@ function ComposeScreen({ theme, onClose, onSubmit }) {
             <button key={c.id} onClick={() => { setCommunity(c); setPickerOpen(false); }} style={btnReset({
               width: '100%', padding: '10px 16px', gap: 12, justifyContent: 'flex-start',
             })}>
-              <Avatar a={c.avatar} size={28} />
+              <Avatar a={c.avatar || avatar(c.name || c.id || 'c', { letter: (c.name || 'c')[0] })} size={28} />
               <div style={{ textAlign: 'left', flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>c/{c.name}</div>
                 <div style={{ fontSize: 11, color: theme.textDim }}>{c.members} members</div>
