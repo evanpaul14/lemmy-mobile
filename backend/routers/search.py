@@ -20,14 +20,13 @@ async def search(
     sid, session = sessions.get_session(request)
 
     def do_search():
-        lemmy = lc.get_or_create(sid, session) if (sid and session) else lc.get_anon()
-        return lemmy.search(q=q, type_=type, sort=sort, page=page, limit=20)
+        client = lc.get_or_create(sid, session) if (sid and session) else lc.get_anon()
+        return client.get("/search", {"q": q, "type": type, "sort": sort, "page": page, "limit": 20})
 
     try:
         result = await asyncio.to_thread(do_search)
         if not isinstance(result, dict):
             result = {}
-
         return {
             "posts": [transform_post(pv) for pv in result.get("posts", [])],
             "communities": [transform_community(cv) for cv in result.get("communities", [])],

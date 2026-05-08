@@ -20,11 +20,11 @@ async def get_my_profile(request: Request):
     instance_display = instance_url.replace("https://", "").replace("http://", "")
 
     if not username:
-        # Anonymous session
         return {"user": None, "posts": [], "comments": []}
 
     def fetch():
-        return lc.get_or_create(sid, session).person.get(username=username)
+        client = lc.get_or_create(sid, session)
+        return client.get("/person", {"username": username})
 
     try:
         result = await asyncio.to_thread(fetch)
@@ -35,11 +35,7 @@ async def get_my_profile(request: Request):
         person = pv.get("person", {})
         counts = pv.get("counts", {})
 
-        posts_raw = result.get("posts", [])
-        comments_raw = result.get("comments", [])
-
-        posts = [transform_post(p) for p in posts_raw[:20]]
-
+        posts = [transform_post(p) for p in result.get("posts", [])[:20]]
         comments = [
             {
                 "id": cv.get("comment", {}).get("id"),
@@ -49,7 +45,7 @@ async def get_my_profile(request: Request):
                 "community": cv.get("community", {}).get("name", ""),
                 "post_title": cv.get("post", {}).get("name", ""),
             }
-            for cv in comments_raw[:20]
+            for cv in result.get("comments", [])[:20]
         ]
 
         return {
@@ -74,8 +70,8 @@ async def get_user_profile(username: str, request: Request):
     sid, session = sessions.get_session(request)
 
     def fetch():
-        lemmy = lc.get_or_create(sid, session) if (sid and session) else lc.get_anon()
-        return lemmy.person.get(username=username)
+        client = lc.get_or_create(sid, session) if (sid and session) else lc.get_anon()
+        return client.get("/person", {"username": username})
 
     try:
         result = await asyncio.to_thread(fetch)

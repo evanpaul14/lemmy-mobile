@@ -17,9 +17,9 @@ function TabBar({ theme, current, onTab, unread }) {
   ];
   return (
     <div style={{
-      position: 'absolute', left: 8, right: 8, bottom: 12, zIndex: 50,
+      position: 'absolute', left: 12, right: 12, bottom: 16, zIndex: 50,
       borderRadius: 999, height: 60,
-      background: theme.amoled ? 'rgba(20,20,22,0.85)' : 'rgba(28,30,36,0.78)',
+      background: theme.amoled ? 'rgba(20,20,22,0.92)' : 'rgba(28,30,36,0.88)',
       backdropFilter: 'blur(24px) saturate(180%)',
       WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       border: `0.5px solid ${theme.hairline}`,
@@ -52,26 +52,6 @@ function TabBar({ theme, current, onTab, unread }) {
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function StatusBar({ dark = true }) {
-  return (
-    <div style={{
-      height: 54, position: 'relative', zIndex: 30,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '14px 28px 0', flexShrink: 0,
-    }}>
-      <div style={{
-        fontFamily: '-apple-system, system-ui', fontWeight: 600,
-        fontSize: 15, color: '#fff',
-      }}>9:41</div>
-      <div style={{ width: 90 }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#fff' }}>
-        <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="0.7" fill="#fff"/><rect x="4.4" y="4.5" width="3" height="6.5" rx="0.7" fill="#fff"/><rect x="8.8" y="2" width="3" height="9" rx="0.7" fill="#fff"/><rect x="13.2" y="0" width="3" height="11" rx="0.7" fill="#fff"/></svg>
-        <svg width="24" height="11" viewBox="0 0 24 11"><rect x="0.5" y="0.5" width="20" height="10" rx="2.5" fill="none" stroke="#fff" strokeOpacity="0.4"/><rect x="2" y="2" width="17" height="7" rx="1.5" fill="#fff"/><rect x="21.5" y="3.5" width="1.5" height="4" rx="0.5" fill="#fff" fillOpacity="0.4"/></svg>
-      </div>
     </div>
   );
 }
@@ -145,23 +125,23 @@ function App() {
       window.COMMUNITIES = enrichCommunities(communitiesData.communities || []);
       setPosts(enrichedPosts);
 
-      // Fetch inbox counts (non-blocking — don't delay app render)
-      Promise.all([API.getReplies(), API.getMentions(), API.getMessages()])
-        .then(([r, m, msg]) => {
-          const notifs = {
-            replies: r.replies || [],
-            mentions: m.mentions || [],
-            messages: msg.messages || [],
-          };
-          window.NOTIFICATIONS = notifs;
-          setNotifications(notifs);
-        })
-        .catch(() => {});
-
-      setAuthed(true);
-      setLoading(false);
+      if (window.ME) {
+        Promise.all([API.getReplies(), API.getMentions(), API.getMessages()])
+          .then(([r, m, msg]) => {
+            const notifs = {
+              replies: r.replies || [],
+              mentions: m.mentions || [],
+              messages: msg.messages || [],
+            };
+            window.NOTIFICATIONS = notifs;
+            setNotifications(notifs);
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       console.error('Failed to load initial data:', err);
+    } finally {
+      setAuthed(true);
       setLoading(false);
     }
   }
@@ -170,14 +150,14 @@ function App() {
   const onVote = (id, v) => {
     const score = v === 'up' ? 1 : v === 'down' ? -1 : 0;
     setPosts(prev => prev.map(p => p.id === id ? { ...p, votes: v } : p));
-    if (authed) API.votePost(id, score).catch(console.error);
+    if (window.ME) API.votePost(id, score).catch(console.error);
   };
 
   const onSave = (id) => {
     setPosts(prev => prev.map(p => {
       if (p.id !== id) return p;
       const newSaved = !p.saved;
-      if (authed) API.savePost(id, newSaved).catch(console.error);
+      if (window.ME) API.savePost(id, newSaved).catch(console.error);
       return { ...p, saved: newSaved };
     }));
   };
@@ -190,7 +170,6 @@ function App() {
   function openPost(post) {
     const item = { kind: 'post', payload: post, comments: [] };
     push(item);
-    // Fetch comments in the background
     API.getComments(post.id)
       .then(data => {
         setStack(prev => prev.map(s =>
@@ -215,6 +194,8 @@ function App() {
     (notifications.mentions || []).filter(n => n.unread).length +
     (notifications.messages || []).filter(n => n.unread).length;
 
+  const loggedIn = !!window.ME;
+
   // ── Screens ─────────────────────────────────────────────────────────────
   let screen;
   if (top) {
@@ -224,13 +205,14 @@ function App() {
         onBack={pop} onVote={onVote} onSave={onSave} onOpenCommunity={openCommunity} />;
     } else if (top.kind === 'community') {
       screen = <CommunityScreen theme={theme} community={top.payload} posts={posts}
-        onBack={pop} onOpenPost={openPost} onVote={onVote} onSave={onSave} />;
+        onBack={pop} onOpenPost={openPost} onVote={onVote} onSave={onSave}
+        loggedIn={loggedIn}
+        onOpenCompose={() => setOverlay('compose')} />;
     }
   } else if (tab === 'home') {
     screen = <HomeScreen theme={theme} posts={posts}
       onOpenPost={openPost} onVote={onVote} onSave={onSave}
       onOpenCommunity={openCommunity}
-      onOpenCompose={() => setOverlay('compose')}
       onOpenSearch={() => setOverlay('search')} />;
   } else if (tab === 'search') {
     screen = <SearchScreen theme={theme} posts={posts}
@@ -271,7 +253,7 @@ function App() {
             };
           }
           setLoading(true);
-          loadInitialData().then(() => setAuthed(true));
+          loadInitialData();
         }} />
         <Tweaks theme={theme} t={t} setTweak={setTweak} />
       </Frame>
@@ -281,7 +263,6 @@ function App() {
   return (
     <Frame theme={theme}>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-        <StatusBar />
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           {screen}
         </div>
@@ -330,47 +311,16 @@ function App() {
 }
 
 function Frame({ theme, children }) {
-  const W = 402, H = 874;
-  const [scale, setScale] = React.useState(1);
-  React.useEffect(() => {
-    function fit() {
-      const sw = window.innerWidth - 24;
-      const sh = window.innerHeight - 24;
-      const s = Math.min(sw / W, sh / H, 1);
-      setScale(s);
-    }
-    fit();
-    window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
-  }, []);
   return (
     <div style={{
-      width: W * scale, height: H * scale,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      width: '100%', height: '100%',
+      position: 'relative',
+      background: theme.bg,
+      overflow: 'hidden',
+      fontFamily: '-apple-system, system-ui, sans-serif',
+      WebkitFontSmoothing: 'antialiased',
     }}>
-      <div style={{
-        width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center center',
-        position: 'relative', flexShrink: 0,
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0, borderRadius: 54, overflow: 'hidden',
-          background: theme.bg,
-          boxShadow: '0 40px 120px rgba(0,0,0,0.6), 0 0 0 8px #1a1a1d, 0 0 0 9px #2a2a2e',
-        }}>
-          <div style={{
-            position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)',
-            width: 122, height: 34, borderRadius: 22, background: '#000', zIndex: 100,
-          }} />
-          {children}
-          <div style={{
-            position: 'absolute', left: 0, right: 0, bottom: 0, height: 24,
-            display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-            paddingBottom: 6, pointerEvents: 'none', zIndex: 200,
-          }}>
-            <div style={{ width: 134, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.5)' }} />
-          </div>
-        </div>
-      </div>
+      {children}
     </div>
   );
 }

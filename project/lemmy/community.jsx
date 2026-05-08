@@ -1,6 +1,6 @@
 // community.jsx — community detail page
 
-function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, onSave }) {
+function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, onSave, loggedIn, onOpenCompose }) {
   const [tab, setTab] = React.useState('posts');
   const [joined, setJoined] = React.useState(community.subscribed !== false);
 
@@ -190,6 +190,17 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
       )}
 
       <div style={{ height: 100 }} />
+
+      {loggedIn && (
+        <button onClick={onOpenCompose} style={btnReset({
+          position: 'fixed', right: 24, bottom: 90, zIndex: 60,
+          width: 52, height: 52, borderRadius: 999,
+          background: theme.accent.hex, color: theme.amoled ? '#000' : '#0a0a0c',
+          boxShadow: `0 10px 28px ${theme.accent.hex}55, 0 2px 8px rgba(0,0,0,0.4)`,
+        })}>
+          <Icon.pencil size={22} stroke={2.4} />
+        </button>
+      )}
     </div>
   );
 }

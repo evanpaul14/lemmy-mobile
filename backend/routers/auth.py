@@ -1,9 +1,8 @@
 import asyncio
-from typing import Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
-from pythorhead import Lemmy
 
 import lemmy_client as lc
 import sessions
@@ -42,23 +41,35 @@ async def login(body: LoginRequest, response: Response):
         raise HTTPException(status_code=400, detail="Username and password required")
 
     def do_login():
-        lemmy = Lemmy(instance_url)
-        result = lemmy.log_in(body.username, body.password)
-        jwt = getattr(lemmy, "key", None)
-        return lemmy, jwt
+        r = httpx.post(
+            f"{instance_url}/api/v3/user/login",
+            json={"username_or_email": body.username, "password": body.password},
+            timeout=15.0,
+            follow_redirects=True,
+        )
+        r.raise_for_status()
+        return r.json().get("jwt")
 
     try:
-        lemmy, jwt = await asyncio.to_thread(do_login)
+        jwt = await asyncio.to_thread(do_login)
+    except httpx.HTTPStatusError as exc:
+        detail = "Invalid credentials"
+        try:
+            detail = exc.response.json().get("error", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=401, detail=f"Login failed: {detail}") from exc
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"Login failed: {exc}") from exc
 
     if not jwt:
         raise HTTPException(status_code=401, detail="Login failed: no token returned")
 
+    client = lc.LemmyClient(instance_url, jwt)
     sid, token = sessions.new_session(
         {"instance": instance_url, "jwt": jwt, "username": body.username}
     )
-    lc.store(sid, lemmy)
+    lc.store(sid, client)
 
     response.set_cookie(sessions.COOKIE_NAME, token, httponly=True, samesite="lax", max_age=86400 * 30)
     return {

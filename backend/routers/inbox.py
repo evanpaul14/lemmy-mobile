@@ -14,16 +14,6 @@ def _require_auth(sid, session):
         raise HTTPException(status_code=401, detail="Authentication required")
 
 
-def _normalize(result, key: str) -> list:
-    if isinstance(result, list):
-        return result
-    if isinstance(result, dict):
-        return result.get(key, [])
-    return []
-
-
-# ── Replies ───────────────────────────────────────────────────────────────────
-
 @router.get("/replies")
 async def get_replies(request: Request):
     sid, session = sessions.get_session(request)
@@ -31,13 +21,9 @@ async def get_replies(request: Request):
         return {"replies": []}
 
     def fetch():
-        lemmy = lc.get_or_create(sid, session)
-        # pythorhead exposes this as comment.get_replies or comment.replies
-        try:
-            result = lemmy.comment.get_replies(unread_only=False, page=1, limit=50)
-        except AttributeError:
-            result = lemmy.comment.replies(unread_only=False, page=1, limit=50)
-        return _normalize(result, "replies")
+        client = lc.get_or_create(sid, session)
+        result = client.get("/comment/replies", {"unread_only": False, "page": 1, "limit": 50})
+        return result.get("replies", []) if isinstance(result, dict) else []
 
     try:
         items = await asyncio.to_thread(fetch)
@@ -46,8 +32,6 @@ async def get_replies(request: Request):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Mentions ──────────────────────────────────────────────────────────────────
-
 @router.get("/mentions")
 async def get_mentions(request: Request):
     sid, session = sessions.get_session(request)
@@ -55,12 +39,9 @@ async def get_mentions(request: Request):
         return {"mentions": []}
 
     def fetch():
-        lemmy = lc.get_or_create(sid, session)
-        try:
-            result = lemmy.person.get_mentions(unread_only=False, page=1, limit=50)
-        except AttributeError:
-            result = lemmy.person.mentions(unread_only=False, page=1, limit=50)
-        return _normalize(result, "mentions")
+        client = lc.get_or_create(sid, session)
+        result = client.get("/person/mention", {"unread_only": False, "page": 1, "limit": 50})
+        return result.get("mentions", []) if isinstance(result, dict) else []
 
     try:
         items = await asyncio.to_thread(fetch)
@@ -69,8 +50,6 @@ async def get_mentions(request: Request):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Messages ──────────────────────────────────────────────────────────────────
-
 @router.get("/messages")
 async def get_messages(request: Request):
     sid, session = sessions.get_session(request)
@@ -78,9 +57,9 @@ async def get_messages(request: Request):
         return {"messages": []}
 
     def fetch():
-        lemmy = lc.get_or_create(sid, session)
-        result = lemmy.private_message.list(unread_only=False, page=1, limit=50)
-        return _normalize(result, "private_messages")
+        client = lc.get_or_create(sid, session)
+        result = client.get("/private_message/list", {"unread_only": False, "page": 1, "limit": 50})
+        return result.get("private_messages", []) if isinstance(result, dict) else []
 
     try:
         items = await asyncio.to_thread(fetch)
@@ -89,17 +68,16 @@ async def get_messages(request: Request):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-# ── Mark read ─────────────────────────────────────────────────────────────────
-
 @router.post("/replies/{reply_id}/read")
 async def mark_reply_read(reply_id: int, request: Request):
     sid, session = sessions.get_session(request)
     _require_auth(sid, session)
 
     def do_mark():
-        return lc.get_or_create(sid, session).comment.mark_as_read(
-            comment_reply_id=reply_id, read=True
-        )
+        return lc.get_or_create(sid, session).post("/comment/mark_as_read", {
+            "comment_reply_id": reply_id,
+            "read": True,
+        })
 
     try:
         await asyncio.to_thread(do_mark)
@@ -114,9 +92,10 @@ async def mark_mention_read(mention_id: int, request: Request):
     _require_auth(sid, session)
 
     def do_mark():
-        return lc.get_or_create(sid, session).person.mark_mention_as_read(
-            person_mention_id=mention_id, read=True
-        )
+        return lc.get_or_create(sid, session).post("/person/mention/mark_as_read", {
+            "person_mention_id": mention_id,
+            "read": True,
+        })
 
     try:
         await asyncio.to_thread(do_mark)
@@ -131,9 +110,10 @@ async def mark_message_read(msg_id: int, request: Request):
     _require_auth(sid, session)
 
     def do_mark():
-        return lc.get_or_create(sid, session).private_message.mark_as_read(
-            private_message_id=msg_id, read=True
-        )
+        return lc.get_or_create(sid, session).post("/private_message/mark_as_read", {
+            "private_message_id": msg_id,
+            "read": True,
+        })
 
     try:
         await asyncio.to_thread(do_mark)

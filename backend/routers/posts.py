@@ -11,7 +11,7 @@ from transforms import build_comment_tree, transform_post
 router = APIRouter()
 
 
-def _get_lemmy(sid, session):
+def _get_client(sid, session) -> lc.LemmyClient:
     if sid and session:
         return lc.get_or_create(sid, session)
     return lc.get_anon()
@@ -20,14 +20,6 @@ def _get_lemmy(sid, session):
 def _require_auth(sid, session):
     if not sid or not session or not session.get("jwt"):
         raise HTTPException(status_code=401, detail="Authentication required")
-
-
-def _normalize_list(result) -> list:
-    if isinstance(result, list):
-        return result
-    if isinstance(result, dict):
-        return result.get("posts", [])
-    return []
 
 
 # ── Feed ──────────────────────────────────────────────────────────────────────
@@ -43,17 +35,15 @@ async def get_posts(
     sid, session = sessions.get_session(request)
 
     def fetch():
-        lemmy = _get_lemmy(sid, session)
-        kwargs = dict(sort=sort, page=page, limit=20)
+        client = _get_client(sid, session)
         if community_name:
-            kwargs["community_name"] = community_name
-        else:
-            kwargs["type_"] = type
-        return lemmy.post.list(**kwargs)
+            return client.get("/post/list", {"community_name": community_name, "sort": sort, "page": page, "limit": 20})
+        return client.get("/post/list", {"type": type, "sort": sort, "page": page, "limit": 20})
 
     try:
         result = await asyncio.to_thread(fetch)
-        return {"posts": [transform_post(pv) for pv in _normalize_list(result)]}
+        posts = result.get("posts", []) if isinstance(result, dict) else []
+        return {"posts": [transform_post(pv) for pv in posts]}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -69,11 +59,9 @@ async def get_comments(
     sid, session = sessions.get_session(request)
 
     def fetch():
-        lemmy = _get_lemmy(sid, session)
-        result = lemmy.comment.list(post_id=post_id, sort=sort, max_depth=6, limit=100)
-        if isinstance(result, dict):
-            return result.get("comments", [])
-        return result or []
+        client = _get_client(sid, session)
+        result = client.get("/comment/list", {"post_id": post_id, "sort": sort, "max_depth": 6, "limit": 100})
+        return result.get("comments", []) if isinstance(result, dict) else []
 
     try:
         cvs = await asyncio.to_thread(fetch)
@@ -87,14 +75,14 @@ async def get_post(post_id: int, request: Request):
     sid, session = sessions.get_session(request)
 
     def fetch():
-        lemmy = _get_lemmy(sid, session)
-        return lemmy.post.get(id=post_id)
+        client = _get_client(sid, session)
+        return client.get("/post", {"id": post_id})
 
     try:
         result = await asyncio.to_thread(fetch)
         if not result:
             raise HTTPException(status_code=404, detail="Post not found")
-        pv = result.get("post_view", result) if isinstance(result, dict) else {}
+        pv = result.get("post_view", {}) if isinstance(result, dict) else {}
         return {"post": transform_post(pv)}
     except HTTPException:
         raise
@@ -105,7 +93,7 @@ async def get_post(post_id: int, request: Request):
 # ── Votes & saves ─────────────────────────────────────────────────────────────
 
 class VoteBody(BaseModel):
-    score: int  # 1 = up, 0 = remove, -1 = down
+    score: int
 
 
 @router.post("/{post_id}/vote")
@@ -114,13 +102,11 @@ async def vote_post(post_id: int, body: VoteBody, request: Request):
     _require_auth(sid, session)
 
     def do_vote():
-        return lc.get_or_create(sid, session).post.like(post_id=post_id, score=body.score)
+        return lc.get_or_create(sid, session).post("/post/like", {"post_id": post_id, "score": body.score})
 
     try:
         result = await asyncio.to_thread(do_vote)
-        counts = {}
-        if isinstance(result, dict):
-            counts = result.get("post_view", {}).get("counts", {})
+        counts = result.get("post_view", {}).get("counts", {}) if isinstance(result, dict) else {}
         votes = "up" if body.score == 1 else "down" if body.score == -1 else None
         return {"success": True, "votes": votes, "score": counts.get("score", 0)}
     except Exception as exc:
@@ -137,7 +123,7 @@ async def save_post(post_id: int, body: SaveBody, request: Request):
     _require_auth(sid, session)
 
     def do_save():
-        return lc.get_or_create(sid, session).post.save(post_id=post_id, save=body.save)
+        return lc.get_or_create(sid, session).post("/post/save", {"post_id": post_id, "save": body.save})
 
     try:
         await asyncio.to_thread(do_save)
@@ -162,19 +148,19 @@ async def create_post(body: CreatePostBody, request: Request):
     _require_auth(sid, session)
 
     def do_create():
-        return lc.get_or_create(sid, session).post.create(
-            community_id=body.community_id,
-            name=body.title,
-            body=body.body,
-            url=body.url,
-            nsfw=body.nsfw,
-        )
+        return lc.get_or_create(sid, session).post("/post", {
+            "community_id": body.community_id,
+            "name": body.title,
+            "body": body.body,
+            "url": body.url,
+            "nsfw": body.nsfw,
+        })
 
     try:
         result = await asyncio.to_thread(do_create)
         if not result:
             raise HTTPException(status_code=500, detail="Failed to create post")
-        pv = result.get("post_view", result) if isinstance(result, dict) else {}
+        pv = result.get("post_view", {}) if isinstance(result, dict) else {}
         return {"post": transform_post(pv)}
     except HTTPException:
         raise

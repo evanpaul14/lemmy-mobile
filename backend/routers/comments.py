@@ -16,7 +16,7 @@ def _require_auth(sid, session):
 
 
 class VoteBody(BaseModel):
-    score: int  # 1, 0, -1
+    score: int
 
 
 @router.post("/{comment_id}/vote")
@@ -25,7 +25,7 @@ async def vote_comment(comment_id: int, body: VoteBody, request: Request):
     _require_auth(sid, session)
 
     def do_vote():
-        return lc.get_or_create(sid, session).comment.like(comment_id=comment_id, score=body.score)
+        return lc.get_or_create(sid, session).post("/comment/like", {"comment_id": comment_id, "score": body.score})
 
     try:
         await asyncio.to_thread(do_vote)
@@ -46,11 +46,11 @@ async def create_comment(body: CreateCommentBody, request: Request):
     _require_auth(sid, session)
 
     def do_create():
-        return lc.get_or_create(sid, session).comment.create(
-            post_id=body.post_id,
-            content=body.content,
-            parent_id=body.parent_id,
-        )
+        return lc.get_or_create(sid, session).post("/comment", {
+            "post_id": body.post_id,
+            "content": body.content,
+            "parent_id": body.parent_id,
+        })
 
     try:
         await asyncio.to_thread(do_create)
@@ -65,9 +65,10 @@ async def mark_comment_read(comment_id: int, request: Request):
     _require_auth(sid, session)
 
     def do_mark():
-        return lc.get_or_create(sid, session).comment.mark_as_read(
-            comment_reply_id=comment_id, read=True
-        )
+        return lc.get_or_create(sid, session).post("/comment/mark_as_read", {
+            "comment_reply_id": comment_id,
+            "read": True,
+        })
 
     try:
         await asyncio.to_thread(do_mark)

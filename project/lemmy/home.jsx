@@ -1,5 +1,5 @@
 // home.jsx — home feed screen
-function HomeScreen({ theme, posts, onOpenPost, onVote, onSave, onOpenCommunity, onOpenCompose, onOpenSearch }) {
+function HomeScreen({ theme, posts, onOpenPost, onVote, onSave, onOpenCommunity, onOpenSearch }) {
   const [sort, setSort] = React.useState('hot');
   const [feed, setFeed] = React.useState('subscribed');
   const [refreshing, setRefreshing] = React.useState(false);
@@ -137,16 +137,6 @@ function HomeScreen({ theme, posts, onOpenPost, onVote, onSave, onOpenCommunity,
 
         <div style={{ height: 90 }} />
       </div>
-
-      {/* floating compose */}
-      <button onClick={onOpenCompose} style={btnReset({
-        position: 'absolute', right: 18, bottom: 28, zIndex: 4,
-        width: 52, height: 52, borderRadius: 999,
-        background: theme.accent.hex, color: theme.amoled ? '#000' : '#0a0a0c',
-        boxShadow: `0 10px 28px ${theme.accent.hex}55, 0 2px 8px rgba(0,0,0,0.4)`,
-      })}>
-        <Icon.pencil size={22} stroke={2.4} />
-      </button>
     </div>
   );
 }
