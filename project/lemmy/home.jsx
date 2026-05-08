@@ -1,11 +1,28 @@
 // home.jsx — home feed screen
-function HomeScreen({ theme, posts, onOpenPost, onVote, onSave, onOpenCommunity, onOpenSearch }) {
-  const [sort, setSort] = React.useState('hot');
-  const [feed, setFeed] = React.useState('subscribed');
+function HomeScreen({ theme, onOpenPost, onVote, onSave, onOpenCommunity, onOpenSearch }) {
+  const [sort, setSort] = React.useState('Hot');
+  const [feed, setFeed] = React.useState('all');
+  const [feedPosts, setFeedPosts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [pullDist, setPullDist] = React.useState(0);
   const startY = React.useRef(null);
   const scrollerRef = React.useRef(null);
+
+  const FEED_TYPE = { subscribed: 'Subscribed', local: 'Local', all: 'All' };
+
+  function fetchFeed(isRefresh = false) {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    API.getPosts(FEED_TYPE[feed] || 'All', sort, 1)
+      .then(data => setFeedPosts(enrichPosts(data.posts || [])))
+      .catch(err => setError(err.message || 'Failed to load posts'))
+      .finally(() => { setLoading(false); setRefreshing(false); setPullDist(0); });
+  }
+
+  React.useEffect(() => { fetchFeed(); }, [feed, sort]);
 
   function onTouchStart(e) {
     if (scrollerRef.current && scrollerRef.current.scrollTop <= 0) {
@@ -15,35 +32,41 @@ function HomeScreen({ theme, posts, onOpenPost, onVote, onSave, onOpenCommunity,
   function onTouchMove(e) {
     if (startY.current == null) return;
     const d = e.touches[0].clientY - startY.current;
-    if (d > 0) {
-      setPullDist(Math.min(d * 0.45, 80));
-    }
+    if (d > 0) setPullDist(Math.min(d * 0.45, 80));
   }
   function onTouchEnd() {
     if (pullDist > 50 && !refreshing) {
-      setRefreshing(true);
-      setTimeout(() => { setRefreshing(false); setPullDist(0); }, 900);
+      fetchFeed(true);
     } else {
       setPullDist(0);
     }
     startY.current = null;
   }
 
+  const handleVote = (id, v) => {
+    setFeedPosts(prev => prev.map(p => p.id === id ? { ...p, votes: v } : p));
+    onVote(id, v);
+  };
+
+  const handleSave = (id) => {
+    setFeedPosts(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const newSaved = !p.saved;
+      onSave(id, newSaved);
+      return { ...p, saved: newSaved };
+    }));
+  };
+
   const sortOpts = [
-    { id: 'hot',  label: 'Hot',  icon: Icon.flame },
-    { id: 'new',  label: 'New',  icon: Icon.clock },
-    { id: 'top',  label: 'Top',  icon: Icon.star },
+    { id: 'Hot',    label: 'Hot',  icon: Icon.flame },
+    { id: 'New',    label: 'New',  icon: Icon.clock },
+    { id: 'TopDay', label: 'Top',  icon: Icon.star  },
   ];
   const feedOpts = [
     { id: 'subscribed', label: 'Subscribed' },
     { id: 'local',      label: 'Local' },
     { id: 'all',        label: 'All' },
   ];
-
-  // Filter posts by feed (just demo: 'all' shows everything, others trim)
-  const visible = feed === 'subscribed' ? posts
-    : feed === 'local' ? posts.filter(p => p.communityRef.instance === 'lemmy.world')
-    : posts;
 
   return (
     <div ref={scrollerRef}
@@ -122,17 +145,45 @@ function HomeScreen({ theme, posts, onOpenPost, onVote, onSave, onOpenCommunity,
             );
           })}
           <span style={{ flex: 1 }} />
-          <button style={btnReset({ color: theme.textDim, gap: 5, fontSize: 12.5, fontWeight: 600 })}>
-            <Icon.filter size={13} stroke={2.4} /> Filter
+          <button onClick={() => fetchFeed()} style={btnReset({ color: theme.textDim, gap: 5, fontSize: 12.5, fontWeight: 600 })}>
+            <Icon.filter size={13} stroke={2.4} /> Refresh
           </button>
         </div>
 
-        {visible.map((p, i) => (
+        {loading && (
+          <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 999,
+              border: `2px solid ${theme.surface2}`, borderTopColor: theme.accent.hex,
+              animation: 'spin 0.8s linear infinite',
+            }} />
+          </div>
+        )}
+
+        {!loading && error && (
+          <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+            <div style={{ color: theme.textDim, fontSize: 13, marginBottom: 12 }}>{error}</div>
+            <button onClick={() => fetchFeed()} style={btnReset({
+              padding: '8px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+              background: theme.surface2, color: theme.text, border: `0.5px solid ${theme.hairline}`,
+            })}>Try again</button>
+          </div>
+        )}
+
+        {!loading && !error && feedPosts.length === 0 && (
+          <div style={{ padding: 40, textAlign: 'center', color: theme.textDim, fontSize: 13 }}>
+            {feed === 'subscribed'
+              ? 'Sign in and subscribe to communities to see posts here.'
+              : 'No posts found.'}
+          </div>
+        )}
+
+        {!loading && feedPosts.map((p, i) => (
           <PostCard key={p.id} post={p} theme={theme}
-            last={i === visible.length - 1}
+            last={i === feedPosts.length - 1}
             onOpen={() => onOpenPost(p)}
-            onVote={(v) => onVote(p.id, v)}
-            onSave={() => onSave(p.id)} />
+            onVote={(v) => handleVote(p.id, v)}
+            onSave={() => handleSave(p.id)} />
         ))}
 
         <div style={{ height: 90 }} />

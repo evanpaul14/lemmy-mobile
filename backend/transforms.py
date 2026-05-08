@@ -124,6 +124,8 @@ def transform_community(cv: dict) -> dict:
         "name": name,
         "instance": instance,
         "members": format_count(counts.get("subscribers", 0)),
+        "active_day": format_count(counts.get("users_active_day", 0)),
+        "posts_count": format_count(counts.get("posts", 0)),
         "desc": community.get("description") or "",
         "cover": "abstract",
         "subscribed": subscribed in ("Subscribed", "Pending"),

@@ -1,6 +1,6 @@
 // search.jsx — search backed by the real Lemmy API
 
-function SearchScreen({ theme, posts, onOpenPost, onOpenCommunity, onBack }) {
+function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
   const [q, setQ] = React.useState('');
   const [tab, setTab] = React.useState('all');
   const [apiResults, setApiResults] = React.useState(null);

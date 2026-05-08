@@ -1,17 +1,45 @@
-// profile.jsx — user profile (own profile)
+// profile.jsx — user profile (own profile, fetched from API)
 
-function ProfileScreen({ theme, posts, onOpenPost, onOpenSettings, onVote, onSave }) {
+function ProfileScreen({ theme, onOpenPost, onOpenSettings, onVote, onSave }) {
   const [tab, setTab] = React.useState('posts');
-  const me = ME || { id: 'me', name: 'you', instance: 'lemmy.world', avatar: avatar('me_user', { letter: 'Y' }) };
+  const [profileData, setProfileData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
 
-  const myPosts = posts.filter(p => p.author === 'me' || p.id === 3); // demo: post #3 is "mine"
-  const savedPosts = posts.filter(p => p.saved);
-  const upvoted = posts.filter(p => p.votes === 'up');
+  React.useEffect(() => {
+    API._req('/profile')
+      .then(data => setProfileData(data))
+      .catch(() => setProfileData(null))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const list = tab === 'posts' ? myPosts
-    : tab === 'saved' ? savedPosts
-    : tab === 'upvoted' ? upvoted
-    : [];
+  const me = window.ME || { id: 'me', name: 'Anonymous', instance: 'lemmy.world', avatar: avatar('me_user', { letter: 'A' }) };
+  const userInfo = profileData?.user;
+  const apiPosts = enrichPosts(profileData?.posts || []);
+  const apiComments = profileData?.comments || [];
+
+  const displayName = userInfo?.name || me.name;
+  const displayInstance = userInfo?.instance || me.instance;
+  const bio = userInfo?.bio || '';
+  const postCount = userInfo?.post_count ?? '—';
+  const commentCount = userInfo?.comment_count ?? '—';
+  const score = userInfo?.score != null ? (userInfo.score >= 1000 ? `${(userInfo.score / 1000).toFixed(1)}k` : String(userInfo.score)) : '—';
+
+  const userAvatar = avatar('me_' + displayName, { letter: (displayName || 'A')[0].toUpperCase() });
+
+  const [postVotes, setPostVotes] = React.useState({});
+  const [postSaves, setPostSaves] = React.useState({});
+
+  const handleVote = (id, v) => {
+    setPostVotes(prev => ({ ...prev, [id]: v }));
+    onVote(id, v);
+  };
+  const handleSave = (id, post) => {
+    const newSaved = !((postSaves[id] ?? post.saved));
+    setPostSaves(prev => ({ ...prev, [id]: newSaved }));
+    onSave(id, newSaved);
+  };
+
+  const list = tab === 'posts' ? apiPosts : [];
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: theme.bg }}>
@@ -45,131 +73,146 @@ function ProfileScreen({ theme, posts, onOpenPost, onOpenSettings, onVote, onSav
       <div style={{ padding: '0 16px 12px', marginTop: -36 }}>
         <div style={{
           width: 80, height: 80, borderRadius: 999,
-          background: me.avatar.bg, color: me.avatar.fg,
+          background: userAvatar.bg, color: userAvatar.fg,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 36, fontWeight: 800, letterSpacing: -1,
           border: `4px solid ${theme.bg}`,
-        }}>{me.avatar.letter}</div>
+        }}>{userAvatar.letter}</div>
 
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>
-            {me.name}
+        {loading ? (
+          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 999,
+              border: `2px solid ${theme.surface2}`, borderTopColor: theme.accent.hex,
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           </div>
-          <div style={{ fontSize: 12.5, color: theme.textDim, marginTop: 1 }}>
-            @{me.instance} · joined Mar 2024
+        ) : !window.ME ? (
+          <div style={{ marginTop: 20, padding: '20px 0', textAlign: 'center', color: theme.textDim, fontSize: 13.5 }}>
+            Sign in to view your profile.
           </div>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: theme.text, letterSpacing: -0.5 }}>
+              {displayName}
+            </div>
+            <div style={{ fontSize: 12.5, color: theme.textDim, marginTop: 1 }}>
+              @{displayInstance}
+            </div>
+            {bio ? (
+              <div style={{ marginTop: 10, fontSize: 14, color: theme.text, lineHeight: 1.45, textWrap: 'pretty' }}>
+                {bio}
+              </div>
+            ) : null}
+
+            {/* stats */}
+            <div style={{ marginTop: 14, display: 'flex', gap: 18 }}>
+              {[
+                { l: 'Posts',    v: postCount },
+                { l: 'Comments', v: commentCount },
+                { l: 'Score',    v: score },
+              ].map(s => (
+                <div key={s.l}>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: theme.text, letterSpacing: -0.3 }}>{s.v}</div>
+                  <div style={{ fontSize: 11.5, color: theme.textDim, marginTop: 1 }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+              <button style={btnReset({
+                flex: 1, padding: '10px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+                background: theme.surface, color: theme.text, border: `0.5px solid ${theme.hairline}`,
+                gap: 6,
+              })}>
+                <Icon.pencil size={14} /> Edit profile
+              </button>
+              <button style={btnReset({
+                padding: '10px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+                background: theme.surface, color: theme.text, border: `0.5px solid ${theme.hairline}`,
+              })}>
+                <Icon.share size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!loading && window.ME && (
+        <>
+          {/* tabs */}
           <div style={{
-            marginTop: 10, fontSize: 14, color: theme.text, lineHeight: 1.45,
-            textWrap: 'pretty',
+            position: 'sticky', top: 0, zIndex: 4, background: theme.bg,
+            display: 'flex', padding: '0 12px',
+            borderBottom: `0.5px solid ${theme.divider}`,
           }}>
-            Self-hoster, weekend photographer, occasional Zig poster. Federated and proud.
+            {[
+              { id: 'posts',    l: 'Posts',    icon: Icon.text },
+              { id: 'comments', l: 'Comments', icon: Icon.comment },
+            ].map(t => {
+              const active = tab === t.id;
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)} style={btnReset({
+                  flex: 1, padding: '12px 6px', gap: 5,
+                  fontSize: 12, fontWeight: 700,
+                  color: active ? theme.text : theme.textDim,
+                  borderBottom: active ? `2px solid ${theme.accent.hex}` : '2px solid transparent',
+                  marginBottom: -0.5,
+                })}>
+                  <t.icon size={14} color={active ? theme.accent.hex : theme.textDim} stroke={2.2} />
+                  {t.l}
+                </button>
+              );
+            })}
           </div>
-        </div>
 
-        {/* stats */}
-        <div style={{ marginTop: 14, display: 'flex', gap: 18 }}>
-          {[
-            { l: 'Posts', v: '47' },
-            { l: 'Comments', v: '1.4k' },
-            { l: 'Score', v: '12.8k' },
-          ].map(s => (
-            <div key={s.l}>
-              <div style={{ fontSize: 17, fontWeight: 800, color: theme.text, letterSpacing: -0.3 }}>{s.v}</div>
-              <div style={{ fontSize: 11.5, color: theme.textDim, marginTop: 1 }}>{s.l}</div>
+          {tab === 'comments' ? (
+            <div>
+              {apiComments.length === 0 && (
+                <div style={{ padding: 60, textAlign: 'center', color: theme.textDim, fontSize: 13.5 }}>
+                  No comments yet.
+                </div>
+              )}
+              {apiComments.map((c, i) => (
+                <div key={c.id || i} style={{ padding: 14, borderBottom: `0.5px solid ${theme.divider}` }}>
+                  <div style={{ fontSize: 11.5, color: theme.textDim, marginBottom: 6 }}>
+                    <span style={{ color: theme.accent.hex, fontWeight: 700 }}>c/{c.community}</span>
+                    <span> · {c.age}</span>
+                  </div>
+                  <div style={{ fontSize: 13.5, color: theme.text, lineHeight: 1.45, textWrap: 'pretty' }}>
+                    {c.body}
+                  </div>
+                  <div style={{
+                    marginTop: 6, fontSize: 11.5, color: theme.textFaint,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}>
+                    <Icon.arrowUp size={11} color={theme.upvote} />
+                    <span style={{ color: theme.text, fontWeight: 600 }}>{c.score}</span>
+                    <Dot />
+                    <span style={{ color: theme.textDim }}>on "{c.post_title}"</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-          <button style={btnReset({
-            flex: 1, padding: '10px', borderRadius: 999, fontSize: 13, fontWeight: 700,
-            background: theme.surface, color: theme.text, border: `0.5px solid ${theme.hairline}`,
-            gap: 6,
-          })}>
-            <Icon.pencil size={14} /> Edit profile
-          </button>
-          <button style={btnReset({
-            padding: '10px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700,
-            background: theme.surface, color: theme.text, border: `0.5px solid ${theme.hairline}`,
-          })}>
-            <Icon.share size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* tabs */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 4, background: theme.bg,
-        display: 'flex', padding: '0 12px',
-        borderBottom: `0.5px solid ${theme.divider}`,
-      }}>
-        {[
-          { id: 'posts',     l: 'Posts',     icon: Icon.text },
-          { id: 'comments',  l: 'Comments',  icon: Icon.comment },
-          { id: 'saved',     l: 'Saved',     icon: Icon.bookmark },
-          { id: 'upvoted',   l: 'Upvoted',   icon: Icon.arrowUp },
-        ].map(t => {
-          const active = tab === t.id;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={btnReset({
-              flex: 1, padding: '12px 6px', gap: 5,
-              fontSize: 12, fontWeight: 700,
-              color: active ? theme.text : theme.textDim,
-              borderBottom: active ? `2px solid ${theme.accent.hex}` : '2px solid transparent',
-              marginBottom: -0.5,
-            })}>
-              <t.icon size={14} color={active ? theme.accent.hex : theme.textDim} stroke={2.2} />
-              {t.l}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === 'comments' ? (
-        <div>
-          {[
-            { c: 'selfhosted', body: 'Yeah and the upgrade story is just `docker compose pull && docker compose up -d`. I have a Sunday-morning cron that runs it on quiet services.', score: 88, age: '4h', context: 'After 3 years self-hosting, here is the boring stack…' },
-            { c: 'programming', body: 'Hot take but increasingly mainstream: a thin query module beats the magic. 18 months in production, here is what broke and what didn\'t.', score: 410, age: '1d', context: 'Why I stopped using ORMs' },
-            { c: 'photography', body: 'Pentax K1 has the best in-body stabilization for a full-frame body in this price tier. Easily 2-3 stops of usable handheld.', score: 47, age: '2d', context: 'Foggy morning over the Coast Range' },
-          ].map((c, i) => (
-            <div key={i} style={{
-              padding: 14, borderBottom: `0.5px solid ${theme.divider}`,
-            }}>
-              <div style={{
-                fontSize: 11.5, color: theme.textDim, marginBottom: 6,
-              }}>
-                <span style={{ color: theme.accent.hex, fontWeight: 700 }}>c/{c.c}</span>
-                <span> · {c.age}</span>
-              </div>
-              <div style={{
-                fontSize: 13.5, color: theme.text, lineHeight: 1.45,
-                textWrap: 'pretty',
-              }}>{c.body}</div>
-              <div style={{
-                marginTop: 6, fontSize: 11.5, color: theme.textFaint,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                <Icon.arrowUp size={11} color={theme.upvote} />
-                <span style={{ color: theme.text, fontWeight: 600 }}>{c.score}</span>
-                <Dot />
-                <span>on "{c.context}"</span>
-              </div>
+          ) : (
+            <div style={{ paddingTop: theme.cards ? 10 : 0 }}>
+              {apiPosts.length === 0 && (
+                <div style={{ padding: 60, textAlign: 'center', color: theme.textDim, fontSize: 13.5 }}>
+                  No posts yet.
+                </div>
+              )}
+              {apiPosts.map(p => (
+                <PostCard key={p.id}
+                  post={{ ...p, votes: postVotes[p.id] ?? p.votes, saved: postSaves[p.id] ?? p.saved }}
+                  theme={theme}
+                  onOpen={() => onOpenPost(p)}
+                  onVote={(v) => handleVote(p.id, v)}
+                  onSave={() => handleSave(p.id, p)} />
+              ))}
             </div>
-          ))}
-        </div>
-      ) : list.length > 0 ? (
-        <div style={{ paddingTop: theme.cards ? 10 : 0 }}>
-          {list.map(p => (
-            <PostCard key={p.id} post={p} theme={theme}
-              onOpen={() => onOpenPost(p)}
-              onVote={(v) => onVote(p.id, v)}
-              onSave={() => onSave(p.id)} />
-          ))}
-        </div>
-      ) : (
-        <div style={{ padding: 60, textAlign: 'center', color: theme.textDim, fontSize: 13.5 }}>
-          Nothing in {tab} yet.
-        </div>
+          )}
+        </>
       )}
 
       <div style={{ height: 100 }} />

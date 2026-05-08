@@ -1,14 +1,46 @@
 // community.jsx — community detail page
 
-function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, onSave, loggedIn, onOpenCompose }) {
+function CommunityScreen({ theme, community, onBack, onOpenPost, onVote, onSave, loggedIn, onOpenCompose }) {
   const [tab, setTab] = React.useState('posts');
+  const [sort, setSort] = React.useState('Hot');
   const [joined, setJoined] = React.useState(community.subscribed !== false);
+  const [communityPosts, setCommunityPosts] = React.useState([]);
+  const [postsLoading, setPostsLoading] = React.useState(true);
+  const [postsError, setPostsError] = React.useState(null);
 
-  const banner = community.cover || 'abstract';
-  const bannerSrc = thumb(banner);
+  const bannerSrc = thumb(community.cover || 'abstract');
   const communityAvatar = community.avatar || avatar(community.name || community.id || 'c', { letter: (community.name || 'c')[0] });
 
-  const cPosts = posts.filter(p => p.community === community.id);
+  function fetchPosts(s = sort) {
+    setPostsLoading(true);
+    setPostsError(null);
+    API.getCommunityPosts(community.name, s, 1)
+      .then(data => setCommunityPosts(enrichPosts(data.posts || [])))
+      .catch(err => setPostsError(err.message || 'Failed to load posts'))
+      .finally(() => setPostsLoading(false));
+  }
+
+  React.useEffect(() => { fetchPosts(); }, [community.name, sort]);
+
+  const handleVote = (id, v) => {
+    setCommunityPosts(prev => prev.map(p => p.id === id ? { ...p, votes: v } : p));
+    onVote(id, v);
+  };
+
+  const handleSave = (id) => {
+    setCommunityPosts(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const newSaved = !p.saved;
+      onSave(id, newSaved);
+      return { ...p, saved: newSaved };
+    }));
+  };
+
+  const sortOpts = [
+    { id: 'Hot',    label: 'Hot' },
+    { id: 'New',    label: 'New' },
+    { id: 'TopDay', label: 'Top' },
+  ];
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: theme.bg }}>
@@ -76,19 +108,19 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
           </button>
         </div>
 
-        <div style={{
-          marginTop: 12, fontSize: 13.5, color: theme.textDim,
-          lineHeight: 1.45, textWrap: 'pretty',
-        }}>{community.desc}</div>
+        {community.desc ? (
+          <div style={{
+            marginTop: 12, fontSize: 13.5, color: theme.textDim,
+            lineHeight: 1.45, textWrap: 'pretty',
+          }}>{community.desc}</div>
+        ) : null}
 
         {/* stats row */}
-        <div style={{
-          marginTop: 14, display: 'flex', gap: 8,
-        }}>
+        <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
           {[
-            { l: 'Members',  v: community.members },
-            { l: 'Online',   v: '2.1k' },
-            { l: 'Posts/day', v: '46' },
+            { l: 'Members',      v: community.members },
+            { l: 'Active today', v: community.active_day || '—' },
+            { l: 'Posts',        v: community.posts_count || '—' },
           ].map(s => (
             <div key={s.l} style={{
               flex: 1, padding: '8px 10px', borderRadius: 12,
@@ -125,16 +157,63 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
       </div>
 
       {tab === 'posts' && (
-        <div style={{ paddingTop: theme.cards ? 10 : 0 }}>
-          {cPosts.map(p => (
-            <PostCard key={p.id} post={p} theme={theme}
-              onOpen={() => onOpenPost(p)}
-              onVote={(v) => onVote(p.id, v)}
-              onSave={() => onSave(p.id)} />
-          ))}
-          {cPosts.length === 0 && (
-            <div style={{ padding: 40, textAlign: 'center', color: theme.textDim, fontSize: 13 }}>
-              No posts yet. Be the first.
+        <div>
+          {/* sort row */}
+          <div style={{
+            padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12,
+            borderBottom: `0.5px solid ${theme.divider}`,
+          }}>
+            {sortOpts.map(s => {
+              const active = sort === s.id;
+              return (
+                <button key={s.id} onClick={() => setSort(s.id)} style={btnReset({
+                  fontSize: 12.5, fontWeight: 700,
+                  color: active ? theme.accent.hex : theme.textDim,
+                  paddingBottom: 4, marginBottom: -4,
+                  borderBottom: active ? `2px solid ${theme.accent.hex}` : '2px solid transparent',
+                })}>{s.label}</button>
+              );
+            })}
+            <span style={{ flex: 1 }} />
+            <button onClick={() => fetchPosts()} style={btnReset({ color: theme.textDim, fontSize: 12, fontWeight: 600 })}>
+              Refresh
+            </button>
+          </div>
+
+          {postsLoading && (
+            <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: 999,
+                border: `2px solid ${theme.surface2}`, borderTopColor: theme.accent.hex,
+                animation: 'spin 0.8s linear infinite',
+              }} />
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            </div>
+          )}
+
+          {!postsLoading && postsError && (
+            <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+              <div style={{ color: theme.textDim, fontSize: 13, marginBottom: 12 }}>{postsError}</div>
+              <button onClick={() => fetchPosts()} style={btnReset({
+                padding: '8px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+                background: theme.surface2, color: theme.text, border: `0.5px solid ${theme.hairline}`,
+              })}>Try again</button>
+            </div>
+          )}
+
+          {!postsLoading && !postsError && (
+            <div style={{ paddingTop: theme.cards ? 10 : 0 }}>
+              {communityPosts.map(p => (
+                <PostCard key={p.id} post={p} theme={theme}
+                  onOpen={() => onOpenPost(p)}
+                  onVote={(v) => handleVote(p.id, v)}
+                  onSave={() => handleSave(p.id)} />
+              ))}
+              {communityPosts.length === 0 && (
+                <div style={{ padding: 40, textAlign: 'center', color: theme.textDim, fontSize: 13 }}>
+                  No posts yet.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -142,6 +221,13 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
 
       {tab === 'about' && (
         <div style={{ padding: 16 }}>
+          {community.desc ? (
+            <div style={{
+              padding: 14, borderRadius: 14, background: theme.surface,
+              border: `0.5px solid ${theme.hairline}`, marginBottom: 14,
+              fontSize: 13.5, color: theme.text, lineHeight: 1.5,
+            }}>{community.desc}</div>
+          ) : null}
           <div style={{
             padding: 14, borderRadius: 14, background: theme.surface,
             border: `0.5px solid ${theme.hairline}`,
@@ -167,10 +253,7 @@ function CommunityScreen({ theme, community, posts, onBack, onOpenPost, onVote, 
 
       {tab === 'modlog' && (
         <div style={{ padding: 16 }}>
-          {(USERS.length === 0
-            ? [{ id: community.name, name: community.name, instance: community.instance, avatar: communityAvatar }]
-            : USERS.slice(0, 4)
-          ).map(u => (
+          {[{ id: community.name, name: community.name, instance: community.instance, avatar: communityAvatar }].map(u => (
             <div key={u.id} style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '12px 0', borderBottom: `0.5px solid ${theme.divider}`,

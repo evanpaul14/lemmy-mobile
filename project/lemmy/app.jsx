@@ -90,7 +90,6 @@ function App() {
   const [tab, setTab] = React.useState('home');
   const [stack, setStack] = React.useState([]);
   const [overlay, setOverlay] = React.useState(null);
-  const [posts, setPosts] = React.useState([]);
   const [notifications, setNotifications] = React.useState({ replies: [], mentions: [], messages: [] });
 
   // ── Initial auth check ──────────────────────────────────────────────────
@@ -116,14 +115,8 @@ function App() {
 
   async function loadInitialData() {
     try {
-      const [postsData, communitiesData] = await Promise.all([
-        API.getPosts('All', 'Hot', 1),
-        API.getCommunities('All'),
-      ]);
-
-      const enrichedPosts = enrichPosts(postsData.posts || []);
+      const communitiesData = await API.getCommunities('All');
       window.COMMUNITIES = enrichCommunities(communitiesData.communities || []);
-      setPosts(enrichedPosts);
 
       if (window.ME) {
         Promise.all([API.getReplies(), API.getMentions(), API.getMessages()])
@@ -146,20 +139,12 @@ function App() {
     }
   }
 
-  // ── Post mutations ──────────────────────────────────────────────────────
+  // ── Post mutations — API side-effects only; each screen owns its local state ──
   const onVote = (id, v) => {
-    const score = v === 'up' ? 1 : v === 'down' ? -1 : 0;
-    setPosts(prev => prev.map(p => p.id === id ? { ...p, votes: v } : p));
-    if (window.ME) API.votePost(id, score).catch(console.error);
+    if (window.ME) API.votePost(id, v === 'up' ? 1 : v === 'down' ? -1 : 0).catch(console.error);
   };
-
-  const onSave = (id) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== id) return p;
-      const newSaved = !p.saved;
-      if (window.ME) API.savePost(id, newSaved).catch(console.error);
-      return { ...p, saved: newSaved };
-    }));
+  const onSave = (id, newSaved) => {
+    if (window.ME) API.savePost(id, newSaved).catch(console.error);
   };
 
   // ── Navigation ──────────────────────────────────────────────────────────
@@ -200,29 +185,28 @@ function App() {
   let screen;
   if (top) {
     if (top.kind === 'post') {
-      const fresh = posts.find(p => p.id === top.payload.id) || top.payload;
-      screen = <PostDetailScreen theme={theme} post={fresh} comments={top.comments || []}
+      screen = <PostDetailScreen theme={theme} post={top.payload} comments={top.comments || []}
         onBack={pop} onVote={onVote} onSave={onSave} onOpenCommunity={openCommunity} />;
     } else if (top.kind === 'community') {
-      screen = <CommunityScreen theme={theme} community={top.payload} posts={posts}
+      screen = <CommunityScreen theme={theme} community={top.payload}
         onBack={pop} onOpenPost={openPost} onVote={onVote} onSave={onSave}
         loggedIn={loggedIn}
         onOpenCompose={() => setOverlay('compose')} />;
     }
   } else if (tab === 'home') {
-    screen = <HomeScreen theme={theme} posts={posts}
+    screen = <HomeScreen theme={theme}
       onOpenPost={openPost} onVote={onVote} onSave={onSave}
       onOpenCommunity={openCommunity}
       onOpenSearch={() => setOverlay('search')} />;
   } else if (tab === 'search') {
-    screen = <SearchScreen theme={theme} posts={posts}
+    screen = <SearchScreen theme={theme}
       onOpenPost={openPost} onOpenCommunity={openCommunity}
       onBack={() => selectTab('home')} />;
   } else if (tab === 'inbox') {
     screen = <InboxScreen theme={theme} notifications={notifications}
       onNotificationsChange={setNotifications} onOpenPost={openPost} />;
   } else if (tab === 'profile') {
-    screen = <ProfileScreen theme={theme} posts={posts}
+    screen = <ProfileScreen theme={theme}
       onOpenPost={openPost}
       onOpenSettings={() => setOverlay('settings')}
       onVote={onVote} onSave={onSave} />;
@@ -286,7 +270,6 @@ function App() {
                 avatar: data.community.avatar || avatar(data.community.name || 'c', { letter: (data.community.name || 'c')[0] }),
               };
               newPost.authorRef = window.ME || { id: 'me', name: 'you', instance: 'lemmy.world', avatar: avatar('me') };
-              setPosts(prev => [newPost, ...prev]);
               setOverlay(null);
             }} />
         </Sheet>
@@ -298,7 +281,7 @@ function App() {
       )}
       {overlay === 'search' && (
         <Sheet theme={theme}>
-          <SearchScreen theme={theme} posts={posts}
+          <SearchScreen theme={theme}
             onOpenPost={(p) => { setOverlay(null); openPost(p); }}
             onOpenCommunity={(c) => { setOverlay(null); openCommunity(c); }}
             onBack={() => setOverlay(null)} />
