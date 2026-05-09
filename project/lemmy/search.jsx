@@ -1,6 +1,6 @@
 // search.jsx — search backed by the real Lemmy API
 
-function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
+function SearchScreen({ theme, onOpenPost, onOpenCommunity, onOpenUser, onBack }) {
   const [q, setQ] = React.useState('');
   const [tab, setTab] = React.useState('all');
   const [apiResults, setApiResults] = React.useState(null);
@@ -26,22 +26,16 @@ function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
             users: data.users || [],
           });
         })
-        .catch(() => setApiResults(null))
+        .catch(() => setApiResults({ communities: [], posts: [], users: [] }))
         .finally(() => setSearching(false));
     }, 400);
     return () => clearTimeout(debounceRef.current);
   }, [q]);
 
   const ql = q.trim().toLowerCase();
-  // Use API results when available, fall back to local filter for instant feel
-  const fc = apiResults ? apiResults.communities
-    : ql ? COMMUNITIES.filter(c => c.name.toLowerCase().includes(ql) || (c.desc || '').toLowerCase().includes(ql)) : [];
-  const fp = apiResults ? apiResults.posts
-    : ql ? POSTS.filter(p => p.title.toLowerCase().includes(ql) || (p.body || '').toLowerCase().includes(ql)) : [];
-  const fu = apiResults ? apiResults.users
-    : ql ? USERS.filter(u => u.name.toLowerCase().includes(ql)) : [];
-
-  const recent = ['rust', 'mech keyboards', 'cozy games', 'self-host backup'];
+  const fc = apiResults ? apiResults.communities : [];
+  const fp = apiResults ? apiResults.posts : [];
+  const fu = apiResults ? apiResults.users : [];
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: theme.bg }}>
@@ -80,10 +74,10 @@ function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
         {ql && (
           <div style={{ display: 'flex', gap: 0, marginTop: 8, paddingLeft: 4 }}>
             {[
-              { id: 'all',  l: 'All' },
+              { id: 'all',         l: 'All' },
               { id: 'communities', l: `Communities (${fc.length})` },
-              { id: 'posts', l: `Posts (${fp.length})` },
-              { id: 'users', l: `Users (${fu.length})` },
+              { id: 'posts',       l: `Posts (${fp.length})` },
+              { id: 'users',       l: `Users (${fu.length})` },
             ].map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={btnReset({
                 padding: '8px 12px', fontSize: 12.5, fontWeight: 700,
@@ -96,49 +90,21 @@ function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
       </div>
 
       {!ql && (
-        <div style={{ padding: '4px 16px 20px' }}>
-          {/* recent */}
-          <Section theme={theme} title="Recent">
-            {recent.map(r => (
-              <button key={r} onClick={() => setQ(r)} style={btnReset({
-                width: '100%', padding: '10px 0', justifyContent: 'flex-start', gap: 12,
-                color: theme.text, fontSize: 14,
-                borderBottom: `0.5px solid ${theme.divider}`,
-              })}>
-                <Icon.clock size={16} color={theme.textDim} />
-                <span style={{ flex: 1, textAlign: 'left' }}>{r}</span>
-                <Icon.back size={14} color={theme.textFaint} style={{ transform: 'scaleX(-1) rotate(45deg)' }} />
-              </button>
-            ))}
-          </Section>
-
-          {/* trending */}
-          <Section theme={theme} title="Trending">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {TRENDING_TAGS.map(t => (
-                <button key={t} onClick={() => setQ(t.replace('-', ' '))} style={btnReset({
-                  padding: '8px 12px', borderRadius: 999,
-                  background: theme.surface, color: theme.text,
-                  border: `0.5px solid ${theme.hairline}`,
-                  fontSize: 12.5, fontWeight: 600, gap: 4,
-                })}>
-                  <Icon.hash size={12} color={theme.accent.hex} stroke={2.4} /> {t}
-                </button>
-              ))}
-            </div>
-          </Section>
-
-          {/* explore communities */}
-          <Section theme={theme} title="Explore communities">
-            {COMMUNITIES.slice(0, 4).map(c => (
-              <CommunityRow key={c.id} c={c} theme={theme} onOpen={() => onOpenCommunity(c)} />
-            ))}
-          </Section>
+        <div style={{ padding: '40px 20px', textAlign: 'center', color: theme.textDim, fontSize: 14 }}>
+          <Icon.search size={32} color={theme.textFaint} />
+          <div style={{ marginTop: 12, fontSize: 15, fontWeight: 600, color: theme.textDim }}>Search Lemmy</div>
+          <div style={{ marginTop: 6, fontSize: 13, color: theme.textFaint }}>Find communities, posts, and users</div>
         </div>
       )}
 
       {ql && (
         <div style={{ padding: '4px 0 80px' }}>
+          {searching && fc.length === 0 && fp.length === 0 && fu.length === 0 && (
+            <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: 22, height: 22, borderRadius: 999, border: `2px solid ${theme.surface2}`, borderTopColor: theme.accent.hex, animation: 'spin 0.8s linear infinite' }} />
+            </div>
+          )}
+
           {(tab === 'all' || tab === 'communities') && fc.length > 0 && (
             <Section theme={theme} title="Communities" inset>
               {fc.map(c => <CommunityRow key={c.id} c={c} theme={theme} onOpen={() => onOpenCommunity(c)} />)}
@@ -147,20 +113,16 @@ function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
           {(tab === 'all' || tab === 'users') && fu.length > 0 && (
             <Section theme={theme} title="Users" inset>
               {fu.map(u => (
-                <div key={u.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 16px', borderBottom: `0.5px solid ${theme.divider}`,
-                }}>
-                  <Avatar a={u.avatar} size={40} />
-                  <div style={{ flex: 1 }}>
+                <button key={u.id || u.name} onClick={() => onOpenUser && onOpenUser(u.name, u.instance)} style={btnReset({
+                  width: '100%', padding: '10px 16px', gap: 12, justifyContent: 'flex-start',
+                  borderBottom: `0.5px solid ${theme.divider}`,
+                })}>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{u.name}</div>
                     <div style={{ fontSize: 11.5, color: theme.textDim }}>@{u.instance}</div>
                   </div>
-                  <button style={btnReset({
-                    padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700,
-                    background: `${theme.accent.hex}22`, color: theme.accent.hex,
-                  })}>Follow</button>
-                </div>
+                  <Icon.back size={14} color={theme.textFaint} style={{ transform: 'scaleX(-1)' }} />
+                </button>
               ))}
             </Section>
           )}
@@ -168,11 +130,13 @@ function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
             <Section theme={theme} title="Posts" inset>
               {fp.map(p => (
                 <PostCard key={p.id} post={p} theme={theme}
-                  onOpen={() => onOpenPost(p)} onVote={() => {}} onSave={() => {}} />
+                  onOpen={() => onOpenPost(p)}
+                  onVote={() => {}} onSave={() => {}}
+                  onOpenCommunity={onOpenCommunity} />
               ))}
             </Section>
           )}
-          {fc.length === 0 && fp.length === 0 && fu.length === 0 && (
+          {!searching && fc.length === 0 && fp.length === 0 && fu.length === 0 && (
             <div style={{ padding: 40, textAlign: 'center', color: theme.textDim, fontSize: 13.5 }}>
               No results for "{q}".
             </div>
@@ -202,7 +166,6 @@ function CommunityRow({ c, theme, onOpen }) {
       width: '100%', padding: '10px 16px', gap: 12, justifyContent: 'flex-start',
       borderBottom: `0.5px solid ${theme.divider}`,
     })}>
-      <Avatar a={c.avatar} size={40} />
       <div style={{ flex: 1, textAlign: 'left' }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>c/{c.name}</div>
         <div style={{ fontSize: 11.5, color: theme.textDim, marginTop: 1 }}>

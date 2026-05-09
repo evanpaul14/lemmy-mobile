@@ -1,6 +1,6 @@
 // community.jsx — community detail page
 
-function CommunityScreen({ theme, community, onBack, onOpenPost, onVote, onSave, loggedIn, onOpenCompose }) {
+function CommunityScreen({ theme, community, onBack, onOpenPost, onVote, onSave, onOpenUser, loggedIn, onOpenCompose }) {
   const [tab, setTab] = React.useState('posts');
   const [sort, setSort] = React.useState('Hot');
   const [joined, setJoined] = React.useState(community.subscribed !== false);
@@ -207,7 +207,8 @@ function CommunityScreen({ theme, community, onBack, onOpenPost, onVote, onSave,
                 <PostCard key={p.id} post={p} theme={theme}
                   onOpen={() => onOpenPost(p)}
                   onVote={(v) => handleVote(p.id, v)}
-                  onSave={() => handleSave(p.id)} />
+                  onSave={() => handleSave(p.id)}
+                  onOpenCommunity={() => {}} />
               ))}
               {communityPosts.length === 0 && (
                 <div style={{ padding: 40, textAlign: 'center', color: theme.textDim, fontSize: 13 }}>

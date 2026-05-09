@@ -139,7 +139,7 @@ function App() {
     }
   }
 
-  // ── Post mutations — API side-effects only; each screen owns its local state ──
+  // ── Post mutations ──────────────────────────────────────────────────────
   const onVote = (id, v) => {
     if (window.ME) API.votePost(id, v === 'up' ? 1 : v === 'down' ? -1 : 0).catch(console.error);
   };
@@ -153,20 +153,14 @@ function App() {
   const pop = () => setStack(prev => prev.slice(0, -1));
 
   function openPost(post) {
-    const item = { kind: 'post', payload: post, comments: [] };
-    push(item);
-    API.getComments(post.id)
-      .then(data => {
-        setStack(prev => prev.map(s =>
-          s.kind === 'post' && s.payload.id === post.id
-            ? { ...s, comments: enrichComments(data.comments || []) }
-            : s
-        ));
-      })
-      .catch(console.error);
+    push({ kind: 'post', payload: post });
   }
 
   function openCommunity(c) { push({ kind: 'community', payload: c }); }
+
+  function openUser(username, instance) {
+    push({ kind: 'user', payload: { username, instance } });
+  }
 
   function selectTab(id) {
     setStack([]);
@@ -185,13 +179,24 @@ function App() {
   let screen;
   if (top) {
     if (top.kind === 'post') {
-      screen = <PostDetailScreen theme={theme} post={top.payload} comments={top.comments || []}
-        onBack={pop} onVote={onVote} onSave={onSave} onOpenCommunity={openCommunity} />;
+      screen = <PostDetailScreen theme={theme} post={top.payload}
+        onBack={pop} onVote={onVote} onSave={onSave}
+        onOpenCommunity={openCommunity}
+        onOpenUser={openUser} />;
     } else if (top.kind === 'community') {
       screen = <CommunityScreen theme={theme} community={top.payload}
         onBack={pop} onOpenPost={openPost} onVote={onVote} onSave={onSave}
+        onOpenUser={openUser}
         loggedIn={loggedIn}
         onOpenCompose={() => setOverlay('compose')} />;
+    } else if (top.kind === 'user') {
+      screen = <OtherProfileScreen theme={theme}
+        username={top.payload.username}
+        instance={top.payload.instance}
+        onBack={pop}
+        onOpenPost={openPost}
+        onVote={onVote}
+        onSave={onSave} />;
     }
   } else if (tab === 'home') {
     screen = <HomeScreen theme={theme}
@@ -201,6 +206,7 @@ function App() {
   } else if (tab === 'search') {
     screen = <SearchScreen theme={theme}
       onOpenPost={openPost} onOpenCommunity={openCommunity}
+      onOpenUser={openUser}
       onBack={() => selectTab('home')} />;
   } else if (tab === 'inbox') {
     screen = <InboxScreen theme={theme} notifications={notifications}
@@ -284,6 +290,7 @@ function App() {
           <SearchScreen theme={theme}
             onOpenPost={(p) => { setOverlay(null); openPost(p); }}
             onOpenCommunity={(c) => { setOverlay(null); openCommunity(c); }}
+            onOpenUser={(name, inst) => { setOverlay(null); openUser(name, inst); }}
             onBack={() => setOverlay(null)} />
         </Sheet>
       )}

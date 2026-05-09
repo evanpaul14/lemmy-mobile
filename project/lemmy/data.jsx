@@ -104,7 +104,9 @@ const API = {
     API._req(`/posts?type=${type}&sort=${sort}&page=${page}`),
   getPost: (id) => API._req(`/posts/${id}`),
   getComments: (postId, sort = 'Hot') =>
-    API._req(`/posts/${postId}/comments?sort=${sort}`),
+    API._req(`/posts/${postId}/comments?sort=${encodeURIComponent(sort)}`),
+  getUserProfile: (username) =>
+    API._req(`/profile/${encodeURIComponent(username)}`),
   votePost: (id, score) =>
     API._req(`/posts/${id}/vote`, { method: 'POST', body: JSON.stringify({ score }) }),
   savePost: (id, save) =>

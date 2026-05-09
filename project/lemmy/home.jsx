@@ -58,9 +58,15 @@ function HomeScreen({ theme, onOpenPost, onVote, onSave, onOpenCommunity, onOpen
   };
 
   const sortOpts = [
-    { id: 'Hot',    label: 'Hot',  icon: Icon.flame },
-    { id: 'New',    label: 'New',  icon: Icon.clock },
-    { id: 'TopDay', label: 'Top',  icon: Icon.star  },
+    { id: 'Hot',       label: 'Hot',      icon: Icon.flame },
+    { id: 'Active',    label: 'Active',   icon: Icon.clock },
+    { id: 'New',       label: 'New',      icon: Icon.clock },
+    { id: 'TopDay',    label: 'Today',    icon: Icon.star  },
+    { id: 'TopWeek',   label: 'Week',     icon: Icon.star  },
+    { id: 'TopMonth',  label: 'Month',    icon: Icon.star  },
+    { id: 'TopYear',   label: 'Year',     icon: Icon.star  },
+    { id: 'TopAll',    label: 'All time', icon: Icon.star  },
+    { id: 'MostComments', label: 'Comments', icon: Icon.comment },
   ];
   const feedOpts = [
     { id: 'subscribed', label: 'Subscribed' },
@@ -124,31 +130,34 @@ function HomeScreen({ theme, onOpenPost, onVote, onSave, onOpenCommunity, onOpen
           ))}
         </div>
 
-        {/* sort row */}
+        {/* sort row — horizontally scrollable */}
         <div style={{
-          padding: '4px 16px 12px', display: 'flex', alignItems: 'center', gap: 14,
-          fontSize: 12.5, fontWeight: 600, color: theme.textDim,
-          borderBottom: `0.5px solid ${theme.divider}`, marginBottom: theme.cards ? 10 : 0,
+          padding: '4px 0 12px',
+          borderBottom: `0.5px solid ${theme.divider}`,
+          marginBottom: theme.cards ? 10 : 0,
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
         }}>
-          {sortOpts.map(s => {
-            const active = sort === s.id;
-            return (
-              <button key={s.id} onClick={() => setSort(s.id)} style={btnReset({
-                gap: 5, color: active ? theme.accent.hex : theme.textDim,
-                fontSize: 12.5, fontWeight: 700,
-                paddingBottom: 8, marginBottom: -8,
-                borderBottom: active ? `2px solid ${theme.accent.hex}` : '2px solid transparent',
-              })}>
-                <s.icon size={13} stroke={2.4} />
-                {s.label}
-              </button>
-            );
-          })}
-          <span style={{ flex: 1 }} />
-          <button onClick={() => fetchFeed()} style={btnReset({ color: theme.textDim, gap: 5, fontSize: 12.5, fontWeight: 600 })}>
-            <Icon.filter size={13} stroke={2.4} /> Refresh
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 16px', minWidth: 'max-content' }}>
+            {sortOpts.map(s => {
+              const active = sort === s.id;
+              return (
+                <button key={s.id} onClick={() => setSort(s.id)} style={btnReset({
+                  gap: 4, color: active ? theme.accent.hex : theme.textDim,
+                  fontSize: 12.5, fontWeight: 700,
+                  padding: '6px 10px',
+                  paddingBottom: 8, marginBottom: -8,
+                  borderBottom: active ? `2px solid ${theme.accent.hex}` : '2px solid transparent',
+                  whiteSpace: 'nowrap',
+                })}>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
+        <style>{`.sort-row::-webkit-scrollbar{display:none}`}</style>
 
         {loading && (
           <div style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
@@ -183,7 +192,8 @@ function HomeScreen({ theme, onOpenPost, onVote, onSave, onOpenCommunity, onOpen
             last={i === feedPosts.length - 1}
             onOpen={() => onOpenPost(p)}
             onVote={(v) => handleVote(p.id, v)}
-            onSave={() => handleSave(p.id)} />
+            onSave={() => handleSave(p.id)}
+            onOpenCommunity={onOpenCommunity} />
         ))}
 
         <div style={{ height: 90 }} />
