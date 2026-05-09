@@ -24,7 +24,7 @@ async def get_my_profile(request: Request):
 
     def fetch():
         client = lc.get_or_create(sid, session)
-        return client.get("/person", {"username": username})
+        return client.get("/user", {"username": username})
 
     try:
         result = await asyncio.to_thread(fetch)
@@ -71,7 +71,7 @@ async def get_user_profile(username: str, request: Request):
 
     def fetch():
         client = lc.get_or_create(sid, session) if (sid and session) else lc.get_anon()
-        return client.get("/person", {"username": username})
+        return client.get("/user", {"username": username})
 
     try:
         result = await asyncio.to_thread(fetch)

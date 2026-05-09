@@ -37,7 +37,7 @@ function SearchScreen({ theme, onOpenPost, onOpenCommunity, onBack }) {
   const fc = apiResults ? apiResults.communities
     : ql ? COMMUNITIES.filter(c => c.name.toLowerCase().includes(ql) || (c.desc || '').toLowerCase().includes(ql)) : [];
   const fp = apiResults ? apiResults.posts
-    : ql ? posts.filter(p => p.title.toLowerCase().includes(ql) || (p.body || '').toLowerCase().includes(ql)) : [];
+    : ql ? POSTS.filter(p => p.title.toLowerCase().includes(ql) || (p.body || '').toLowerCase().includes(ql)) : [];
   const fu = apiResults ? apiResults.users
     : ql ? USERS.filter(u => u.name.toLowerCase().includes(ql)) : [];
 

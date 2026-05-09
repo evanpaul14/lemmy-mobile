@@ -1,3 +1,4 @@
+import os
 import secrets
 import time
 from typing import Optional
@@ -5,7 +6,7 @@ from typing import Optional
 from fastapi import Request
 from itsdangerous import URLSafeSerializer, BadSignature
 
-_SECRET = secrets.token_hex(32)
+_SECRET = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
 _signer = URLSafeSerializer(_SECRET)
 _store: dict[str, dict] = {}
 
