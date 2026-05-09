@@ -38,7 +38,7 @@ async def get_posts(
         client = _get_client(sid, session)
         if community_name:
             return client.get("/post/list", {"community_name": community_name, "sort": sort, "page": page, "limit": 20})
-        return client.get("/post/list", {"type": type, "sort": sort, "page": page, "limit": 20})
+        return client.get("/post/list", {"type_": type, "sort": sort, "page": page, "limit": 20})
 
     try:
         result = await asyncio.to_thread(fetch)

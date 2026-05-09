@@ -26,7 +26,7 @@ async def list_communities(
 
     def fetch():
         client = _get_client(sid, session)
-        return client.get("/community/list", {"type": type, "sort": sort, "page": page, "limit": 30})
+        return client.get("/community/list", {"type_": type, "sort": sort, "page": page, "limit": 30})
 
     try:
         result = await asyncio.to_thread(fetch)
